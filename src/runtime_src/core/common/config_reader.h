@@ -307,6 +307,13 @@ get_aie_trace()
   return value;
 }
 
+inline unsigned int
+get_aie_trace_settings_start_id()
+{
+  static unsigned int value = detail::get_uint_value("AIE_trace_settings.start_id", 1);
+  return value;
+}
+
 inline bool
 get_lop_trace()
 {

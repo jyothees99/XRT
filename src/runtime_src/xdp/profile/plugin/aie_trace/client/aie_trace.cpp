@@ -219,6 +219,202 @@ namespace xdp {
     transactionHandler = std::make_unique<aie::ClientTransaction>(context, "AIE Trace Setup");
   }
 
+  bool AieTrace_WinImpl::configureWindowedEventTrace(void* handle) {
+    
+    //Start recording the transaction
+    XAie_StartTransaction(&aieDevInst, XAIE_TRANSACTION_DISABLE_AUTO_FLUSH);
+
+    auto partitionCols = xdp::aie::getPartitionStartColumnsClient(handle);
+    std::cout<<"Partition cols size: "<<partitionCols.size();
+    uint8_t startCol = partitionCols[0];
+    auto numColsVec = xdp::aie::getPartitionNumColumsClient(handle);
+    std::cout<<"numColsVec cols size: "<<numColsVec.size();
+    uint8_t numCols = numColsVec[0];
+
+    std::cout<<"startCol: "<<std::to_string(startCol)<<", numCols: "<<std::to_string(numCols)<<"\n";
+    std::cout<<"startCol: "<<partitionCols[0]<<", numCols: "<<numColsVec[0]<<"\n";
+
+    std::vector<XAie_Events> coreBroadcastEvents = { XAIE_EVENT_BROADCAST_0_CORE,  
+      XAIE_EVENT_BROADCAST_1_CORE, XAIE_EVENT_BROADCAST_2_CORE, XAIE_EVENT_BROADCAST_3_CORE, 
+      XAIE_EVENT_BROADCAST_4_CORE, XAIE_EVENT_BROADCAST_5_CORE, XAIE_EVENT_BROADCAST_6_CORE, 
+      XAIE_EVENT_BROADCAST_7_CORE,	XAIE_EVENT_BROADCAST_8_CORE, 
+      XAIE_EVENT_BROADCAST_9_CORE, XAIE_EVENT_BROADCAST_10_CORE,	
+      XAIE_EVENT_BROADCAST_11_CORE,	XAIE_EVENT_BROADCAST_12_CORE,	
+      XAIE_EVENT_BROADCAST_13_CORE,	XAIE_EVENT_BROADCAST_14_CORE,	
+      XAIE_EVENT_BROADCAST_15_CORE
+    };
+    std::vector<XAie_Events> memBroadcastEvents = { XAIE_EVENT_BROADCAST_0_MEM,
+      XAIE_EVENT_BROADCAST_1_MEM,	XAIE_EVENT_BROADCAST_2_MEM,	XAIE_EVENT_BROADCAST_3_MEM,
+      XAIE_EVENT_BROADCAST_4_MEM,	XAIE_EVENT_BROADCAST_5_MEM,	XAIE_EVENT_BROADCAST_6_MEM,
+      XAIE_EVENT_BROADCAST_7_MEM,	XAIE_EVENT_BROADCAST_8_MEM, XAIE_EVENT_BROADCAST_9_MEM,
+      XAIE_EVENT_BROADCAST_10_MEM, XAIE_EVENT_BROADCAST_11_MEM, XAIE_EVENT_BROADCAST_12_MEM,
+      XAIE_EVENT_BROADCAST_13_MEM, XAIE_EVENT_BROADCAST_14_MEM,	XAIE_EVENT_BROADCAST_15_MEM
+    };
+    std::vector<XAie_Events> memTileBroadcastEvents = {
+      XAIE_EVENT_BROADCAST_0_MEM_TILE, XAIE_EVENT_BROADCAST_1_MEM_TILE, 
+      XAIE_EVENT_BROADCAST_2_MEM_TILE, XAIE_EVENT_BROADCAST_3_MEM_TILE,
+	    XAIE_EVENT_BROADCAST_4_MEM_TILE, XAIE_EVENT_BROADCAST_5_MEM_TILE,
+	    XAIE_EVENT_BROADCAST_6_MEM_TILE, XAIE_EVENT_BROADCAST_7_MEM_TILE,
+	    XAIE_EVENT_BROADCAST_8_MEM_TILE, XAIE_EVENT_BROADCAST_9_MEM_TILE,
+	    XAIE_EVENT_BROADCAST_10_MEM_TILE,	XAIE_EVENT_BROADCAST_11_MEM_TILE,
+	    XAIE_EVENT_BROADCAST_12_MEM_TILE,	XAIE_EVENT_BROADCAST_13_MEM_TILE,
+	    XAIE_EVENT_BROADCAST_14_MEM_TILE,	XAIE_EVENT_BROADCAST_15_MEM_TILE
+    };
+    std::vector<XAie_Events> plBroadcastEvents = {
+      XAIE_EVENT_BROADCAST_A_0_PL, XAIE_EVENT_BROADCAST_A_1_PL,	XAIE_EVENT_BROADCAST_A_2_PL,
+      XAIE_EVENT_BROADCAST_A_3_PL, XAIE_EVENT_BROADCAST_A_4_PL,	XAIE_EVENT_BROADCAST_A_5_PL,
+      XAIE_EVENT_BROADCAST_A_6_PL, XAIE_EVENT_BROADCAST_A_7_PL,	XAIE_EVENT_BROADCAST_A_8_PL,
+      XAIE_EVENT_BROADCAST_A_9_PL, XAIE_EVENT_BROADCAST_A_10_PL, 
+      XAIE_EVENT_BROADCAST_A_11_PL, XAIE_EVENT_BROADCAST_A_12_PL,
+    	XAIE_EVENT_BROADCAST_A_13_PL,	XAIE_EVENT_BROADCAST_A_14_PL,
+      XAIE_EVENT_BROADCAST_A_15_PL
+    };
+
+    //reserve broadcast channel along the shim tiles
+    // std::vector<XAie_LocType> vLocs;
+    // auto pBroadcastRsc = fal_util::s_pXAieDev->broadcast(vLocs, XAIE_PL_MOD, XAIE_PL_MOD);
+    // pBroadcastRsc->reserve();
+    uint8_t broadcastId1 = 2;
+    uint8_t broadcastId2 = 3;
+    // XAie_Events bcastEvent1_PL = plBroadcastEvents[broadcastId1];
+    XAie_Events bcastEvent2_PL = plBroadcastEvents[broadcastId2];
+    XAie_Events shimTraceStartEvent = bcastEvent2_PL;
+    XAie_Events memTileTraceStartEvent = memTileBroadcastEvents[broadcastId1];
+    XAie_Events coreModTraceStartEvent = coreBroadcastEvents[broadcastId1];
+    XAie_Events memTraceStartEvent = memBroadcastEvents[broadcastId1];
+    
+    // if (broadcastId < 0)
+    // {
+    //   return errorMsg(err_code::resource_unavailable, "ERROR: event::start_trace: Failed to request event broadcast resources across shim tiles.");
+    // }
+    unsigned int startID = xrt_core::config::get_aie_trace_settings_start_id();
+    std::cout<<"\n**********************************\n";
+    std::cout<<"Start ID<< "<<startID;
+    std::cout<<"\n**********************************\n";
+    std::vector<uint8_t> maxRowAtCol(startCol + numCols, 0);
+    // NOTE: rows are stored as absolute as required by resource manager
+    
+    for (auto& tileMetric : metadata->getConfigMetrics()) {
+      auto tile       = tileMetric.first;
+      auto col        = tile.col;
+      auto row        = tile.row;
+      auto tileType       = getTileType(row);
+      auto loc        = XAie_TileLoc(col, row);
+      if(tileType == module_type::shim) {
+        XAie_TraceStartEvent(&aieDevInst, loc, XAIE_PL_MOD, shimTraceStartEvent);
+      }
+      else if(tileType == module_type::mem_tile) {
+        XAie_TraceStartEvent(&aieDevInst, loc, XAIE_MEM_MOD, memTileTraceStartEvent);
+      }
+      else {
+        XAie_TraceStartEvent(&aieDevInst, loc, XAIE_CORE_MOD, coreModTraceStartEvent);
+        XAie_TraceStartEvent(&aieDevInst, loc, XAIE_MEM_MOD, memTraceStartEvent);
+      }
+      
+      maxRowAtCol[startCol + col] = std::max(maxRowAtCol[col], (uint8_t)row);
+    }
+    
+    XAie_PerfCounterControlSet(&aieDevInst, XAie_TileLoc(0, 0), XAIE_PL_MOD, 1, XAIE_EVENT_USER_EVENT_1_PL, XAIE_EVENT_USER_EVENT_1_PL);
+    // std::cout<<"\n *** "<<XAIE_EVENT_USER_EVENT_1_PL<<" ***\n";
+    XAie_PerfCounterEventValueSet(&aieDevInst, XAie_TileLoc(0, 0), XAIE_PL_MOD, 1, startID);
+    XAie_EventBroadcast(&aieDevInst, XAie_TileLoc(0, 0), XAIE_PL_MOD, broadcastId2, XAIE_EVENT_PERF_CNT_1_PL);
+    // XAie_EventBroadcast(&aieDevInst, XAie_TileLoc(0, 0), XAIE_PL_MOD, broadcastId2, XAIE_EVENT_USER_EVENT_1_PL);
+    
+    for(uint8_t col = startCol; col < startCol + numCols; col++) {
+      std::cout<<"Configuring Column: "<<std::to_string(col)<<"\n";
+      for(uint8_t row = 0; row <= maxRowAtCol[col]; row++) {
+        std::cout<<"Configuring Windowed Event Trace for: "<<std::to_string(col)<<", "<<std::to_string(row)<<"\n";
+        module_type tileType = getTileType(row);
+        auto loc = XAie_TileLoc(col, row);
+
+        if(tileType == module_type::shim) {
+          // first channel is only used to send north
+          if(col == startCol) {
+            XAie_EventBroadcast(&aieDevInst, loc, XAIE_PL_MOD, broadcastId1, XAIE_EVENT_PERF_CNT_1_PL);
+          }
+          else {
+            XAie_EventBroadcast(&aieDevInst, loc, XAIE_PL_MOD, broadcastId1, bcastEvent2_PL);
+          }
+          if(maxRowAtCol[col] != row) {
+            // auto tileOffset = _XAie_GetTileAddr(&aieDevInst, col, row);
+          // XAie_Write32(&aieDevInst, tileOffset + 0x34050, 0x80);
+          // XAie_Write32(&aieDevInst, tileOffset + 0x34060, 0x80);
+          // XAie_Write32(&aieDevInst, tileOffset + 0x34080, 0x80);
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_PL_MOD, XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST);
+          }
+          else {
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_PL_MOD, XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST | XAIE_EVENT_BROADCAST_NORTH);
+          }
+
+          // second channel is only used to send east
+          XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_PL_MOD, XAIE_EVENT_SWITCH_A, broadcastId2, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_NORTH);
+          
+          if(col != startCol + numCols - 1) {
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_PL_MOD, XAIE_EVENT_SWITCH_B, broadcastId2, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_NORTH);
+          }
+          else {
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_PL_MOD, XAIE_EVENT_SWITCH_B, broadcastId2, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_NORTH | XAIE_EVENT_BROADCAST_EAST);
+          }
+        }
+        else if(tileType == module_type::mem_tile) {
+          if(maxRowAtCol[col] != row) {
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_MEM_MOD, XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST);
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_MEM_MOD, XAIE_EVENT_SWITCH_B, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST);
+          }
+          else {
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_MEM_MOD, XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_NORTH);
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_MEM_MOD, XAIE_EVENT_SWITCH_B, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST | XAIE_EVENT_BROADCAST_NORTH);
+          }
+        }
+        else { //core tile
+          if(maxRowAtCol[col] != row) {
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_CORE_MOD, XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST);
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_MEM_MOD,  XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST);
+          }
+          else {
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_CORE_MOD, XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST | XAIE_EVENT_BROADCAST_NORTH);
+            XAie_EventBroadcastBlockDir(&aieDevInst, loc, XAIE_MEM_MOD,  XAIE_EVENT_SWITCH_A, broadcastId1, XAIE_EVENT_BROADCAST_SOUTH | XAIE_EVENT_BROADCAST_WEST | XAIE_EVENT_BROADCAST_EAST | XAIE_EVENT_BROADCAST_NORTH);
+          }
+        }
+      }
+    }
+    
+    uint8_t *txn_ptr = XAie_ExportSerializedTransaction(&aieDevInst, 1, 0);
+
+    if (!transactionHandler->initializeKernel("XDP_KERNEL"))
+      return false;
+
+    if (!transactionHandler->submitTransaction(txn_ptr))
+      return false;
+    auto tileOffset = _XAie_GetTileAddr(&aieDevInst, 0, 0);
+    uint32_t regValue = 0;
+    
+    // Must clear aie state
+    XAie_ClearTransaction(&aieDevInst);
+
+    xrt_core::message::send(severity_level::info, "XRT", "Finished AIE Winodwed Trace Settings.");
+    
+    // South
+    XAie_Read32(&aieDevInst, tileOffset + 0x00034050, &regValue);
+    printf("South Block Dir: 0x%x\n", regValue);
+    // West
+    XAie_Read32(&aieDevInst, tileOffset + 0x00034060, &regValue);
+    printf("West Block Dir: 0x%x\n", regValue);
+    // North
+    XAie_Read32(&aieDevInst, tileOffset + 0x00034070, &regValue);
+    printf("North Block Dir: 0x%x\n", regValue);
+    // East
+    XAie_Read32(&aieDevInst, tileOffset + 0x00034080, &regValue);
+    printf("North Block Dir: 0x%x\n", regValue);
+    // Broadcast 7
+    XAie_Read32(&aieDevInst, tileOffset + 0x0003402C, &regValue);
+    printf("Broadcast 7 reg : 0x%x\n", regValue);
+    // Broadcast 8
+    XAie_Read32(&aieDevInst, tileOffset + 0x00034030, &regValue);
+    printf("Broadcast 8 reg : 0x%x\n", regValue);
+    return true;
+  }
+
   void AieTrace_WinImpl::updateDevice()
   {
     xrt_core::message::send(severity_level::info, "XRT", "Calling AIE Trace IPU updateDevice.");
@@ -230,6 +426,11 @@ namespace xdp {
     // Set metrics for trace events
     if (!setMetricsSettings(metadata->getDeviceID(), metadata->getHandle())) {
       std::string msg("Unable to configure AIE trace control and events. No trace will be generated.");
+      xrt_core::message::send(severity_level::warning, "XRT", msg);
+      return;
+    }
+    if(!configureWindowedEventTrace(metadata->getHandle())) {
+      std::string msg("Unable to configure AIE Window trace control and events.");
       xrt_core::message::send(severity_level::warning, "XRT", msg);
       return;
     }
