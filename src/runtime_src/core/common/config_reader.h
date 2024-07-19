@@ -310,7 +310,14 @@ get_aie_trace()
 inline unsigned int
 get_aie_trace_settings_start_id()
 {
-  static unsigned int value = detail::get_uint_value("AIE_trace_settings.start_id", 1);
+  static unsigned int value = detail::get_uint_value("AIE_trace_settings.start_id", UINT_MAX);
+  return value;
+}
+
+inline unsigned int
+get_aie_trace_settings_stop_id()
+{
+  static unsigned int value = detail::get_uint_value("AIE_trace_settings.stop_id", UINT_MAX);
   return value;
 }
 
