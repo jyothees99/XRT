@@ -11,8 +11,8 @@ extern "C" {
 
 namespace xdp::aie::trace {  
     module_type getTileType(std::shared_ptr<AieTraceMetadata> metadata, uint8_t absRow);
-    void build2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, void *handle, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2, XAie_Events event);
-    void reset2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, void *handle, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2);
+    void build2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2, XAie_Events event);
+    void reset2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2);
 }
 
 #endif

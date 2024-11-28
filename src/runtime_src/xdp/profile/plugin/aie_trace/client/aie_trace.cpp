@@ -279,7 +279,7 @@ namespace xdp {
       XAie_PerfCounterEventValueSet(&aieDevInst, XAie_TileLoc(startCol, 0), XAIE_PL_MOD, 0, startLayer);
     }
 
-    aie::trace::build2ChannelBroadcastNetwork(&aieDevInst, hwCtxImpl, metadata,traceStartBroadcastChId1, traceStartBroadcastChId2, XAIE_EVENT_PERF_CNT_0_PL);
+    aie::trace::build2ChannelBroadcastNetwork(&aieDevInst, metadata,traceStartBroadcastChId1, traceStartBroadcastChId2, XAIE_EVENT_PERF_CNT_0_PL);
 
     uint8_t *txn_ptr = XAie_ExportSerializedTransaction(&aieDevInst, 1, 0);
 
@@ -1484,7 +1484,7 @@ namespace xdp {
     }  // For tiles
 
     if(m_trace_start_broadcast) {
-      aie::trace::build2ChannelBroadcastNetwork(&aieDevInst, hwCtxImpl, metadata,  traceStartBroadcastChId1, traceStartBroadcastChId2, interfaceTileTraceStartEvent);
+      aie::trace::build2ChannelBroadcastNetwork(&aieDevInst, metadata,  traceStartBroadcastChId1, traceStartBroadcastChId2, interfaceTileTraceStartEvent);
       XAie_EventGenerate(&aieDevInst, XAie_TileLoc(startCol, 0), XAIE_PL_MOD,  interfaceTileTraceStartEvent);
     }
 
@@ -1504,7 +1504,7 @@ namespace xdp {
     // Clearing the broadcast network used for trace start
     if(m_trace_start_broadcast) {
       XAie_StartTransaction(&aieDevInst, XAIE_TRANSACTION_DISABLE_AUTO_FLUSH);
-      aie::trace::reset2ChannelBroadcastNetwork(&aieDevInst, hwCtxImpl, metadata,traceStartBroadcastChId1, traceStartBroadcastChId2);
+      aie::trace::reset2ChannelBroadcastNetwork(&aieDevInst, metadata,traceStartBroadcastChId1, traceStartBroadcastChId2);
       txn_ptr = XAie_ExportSerializedTransaction(&aieDevInst, 1, 0);
       if (!transactionHandler->initializeKernel("XDP_KERNEL"))
         return false;

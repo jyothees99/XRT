@@ -14,8 +14,8 @@ namespace xdp::aie::trace {
     return module_type::core;
   }
 
-  void build2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst,void *hwCtxImpl, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2, XAie_Events event) {
-
+  void build2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2, XAie_Events event) {
+    void *hwCtxImpl = metadata->getHandle();
     boost::property_tree::ptree aiePartitionPt = xdp::aie::getAIEPartitionInfoClient(hwCtxImpl);
     // Currently, assuming only one Hw Context is alive at a time
     uint8_t startCol = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("start_col"));
@@ -83,8 +83,8 @@ namespace xdp::aie::trace {
     }
   }
 
-  void reset2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, void *hwCtxImpl, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2) {
-
+  void reset2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2) {
+    void *hwCtxImpl = metadata->getHandle();
     boost::property_tree::ptree aiePartitionPt = xdp::aie::getAIEPartitionInfoClient(hwCtxImpl);
     // Currently, assuming only one Hw Context is alive at a time
     uint8_t startCol = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("start_col"));
