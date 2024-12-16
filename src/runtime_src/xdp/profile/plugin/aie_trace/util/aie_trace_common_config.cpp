@@ -14,12 +14,12 @@ namespace xdp::aie::trace {
     return module_type::core;
   }
 
-  void build2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2, XAie_Events event) {
-    void *hwCtxImpl = metadata->getHandle();
-    boost::property_tree::ptree aiePartitionPt = xdp::aie::getAIEPartitionInfoClient(hwCtxImpl);
+  void build2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2, XAie_Events event, uint8_t startCol, uint8_t numCols) {
+    // void *hwCtxImpl = metadata->getHandle();
+    // boost::property_tree::ptree aiePartitionPt = xdp::aie::getAIEPartitionInfoClient(hwCtxImpl);
     // Currently, assuming only one Hw Context is alive at a time
-    uint8_t startCol = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("start_col"));
-    uint8_t numCols  = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("num_cols"));
+    // uint8_t startCol = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("start_col"));
+    // uint8_t numCols  = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("num_cols"));
 
     std::vector<uint8_t> maxRowAtCol(startCol + numCols, 0);
     for (auto& tileMetric : metadata->getConfigMetrics()) {
@@ -83,13 +83,7 @@ namespace xdp::aie::trace {
     }
   }
 
-  void reset2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2) {
-    void *hwCtxImpl = metadata->getHandle();
-    boost::property_tree::ptree aiePartitionPt = xdp::aie::getAIEPartitionInfoClient(hwCtxImpl);
-    // Currently, assuming only one Hw Context is alive at a time
-    uint8_t startCol = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("start_col"));
-    uint8_t numCols  = static_cast<uint8_t>(aiePartitionPt.front().second.get<uint64_t>("num_cols"));
-
+  void reset2ChannelBroadcastNetwork(XAie_DevInst* aieDevInst, std::shared_ptr<AieTraceMetadata> metadata, uint8_t broadcastId1, uint8_t broadcastId2, uint8_t startCol, uint8_t numCols) {
     std::vector<uint8_t> maxRowAtCol(startCol + numCols, 0);
     for (auto& tileMetric : metadata->getConfigMetrics()) {
       auto tile       = tileMetric.first;
@@ -122,4 +116,82 @@ namespace xdp::aie::trace {
     }
   }
 
+  void timerSyncronization(XAie_DevInst* aieDevInst, xaiefal::XAieDev* aieDevice, std::shared_ptr<AieTraceMetadata> metadata, uint8_t startCol, uint8_t numCols)
+  {
+    std::shared_ptr<xaiefal::XAieBroadcast> traceStartBroadcastCh1 = nullptr, traceStartBroadcastCh2 = nullptr;
+    std::vector<XAie_LocType> vL;
+    traceStartBroadcastCh1 = aieDevice->broadcast(vL, XAIE_PL_MOD, XAIE_CORE_MOD);
+    traceStartBroadcastCh1->reserve();
+    traceStartBroadcastCh2 = aieDevice->broadcast(vL, XAIE_PL_MOD, XAIE_CORE_MOD);
+    traceStartBroadcastCh2->reserve();
+
+    uint8_t broadcastId1 = traceStartBroadcastCh1->getBc();
+    uint8_t broadcastId2 = traceStartBroadcastCh2->getBc();
+
+    //build broadcast network
+    aie::trace::build2ChannelBroadcastNetwork(aieDevInst, metadata, broadcastId1, traceStartBroadcastCh2->getBc(), XAIE_EVENT_USER_EVENT_0_PL, startCol, numCols);
+
+    //set timer control register
+    for (auto& tileMetric : metadata->getConfigMetrics()) {
+      auto tile       = tileMetric.first;
+      auto col        = tile.col + startCol; 
+      auto row        = tile.row;
+      auto type       = aie::getModuleType(row, metadata->getRowOffset());
+      auto loc        = XAie_TileLoc(col, row);
+    
+      if(type == module_type::shim) {
+        XAie_Events resetEvent = (XAie_Events)(XAIE_EVENT_BROADCAST_A_0_PL + broadcastId2);
+        if(col == 0)
+        {
+          resetEvent = XAIE_EVENT_USER_EVENT_0_PL;
+        }
+        
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_PL_MOD, resetEvent, XAIE_RESETDISABLE);
+      }
+      else if(type == module_type::mem_tile) {
+        XAie_Events resetEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_0_MEM_TILE + broadcastId1);
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_MEM_MOD, resetEvent, XAIE_RESETDISABLE);
+      }
+      else {
+        XAie_Events resetEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_0_CORE + broadcastId1);
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_CORE_MOD, resetEvent, XAIE_RESETDISABLE);
+        resetEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_0_MEM + broadcastId1);
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_MEM_MOD, resetEvent, XAIE_RESETDISABLE);
+      }
+    }
+
+    //Generate the event to trigger broadcast network to reset timer
+    XAie_EventGenerate(aieDevInst, XAie_TileLoc(startCol, 0), XAIE_PL_MOD, XAIE_EVENT_USER_EVENT_0_PL);
+
+    //reset timer control register so that timer are not reset after this point
+    for (auto& tileMetric : metadata->getConfigMetrics()) {
+      auto tile       = tileMetric.first;
+      auto col        = tile.col + startCol;
+      auto row        = tile.row;
+      auto type       = aie::getModuleType(row, metadata->getRowOffset());
+      auto loc        = XAie_TileLoc(col, row);
+
+      if(type == module_type::shim) {
+        XAie_Events resetEvent = XAIE_EVENT_NONE_PL ;
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_PL_MOD, resetEvent, XAIE_RESETDISABLE);
+      }
+      else if(type == module_type::mem_tile) {
+        XAie_Events resetEvent = XAIE_EVENT_NONE_MEM_TILE;
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_MEM_MOD, resetEvent, XAIE_RESETDISABLE);
+      }
+      else {
+        XAie_Events resetEvent = XAIE_EVENT_NONE_CORE;
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_CORE_MOD, resetEvent, XAIE_RESETDISABLE);
+        resetEvent = XAIE_EVENT_NONE_MEM;
+        XAie_SetTimerResetEvent(aieDevInst, loc, XAIE_MEM_MOD, resetEvent, XAIE_RESETDISABLE);
+      }
+    }
+
+    //reset broadcast network
+    reset2ChannelBroadcastNetwork(aieDevInst, metadata, broadcastId1, broadcastId2, startCol, numCols);
+
+    //release the channels used for timer sync
+    traceStartBroadcastCh1->release();
+    traceStartBroadcastCh2->release();
+  }
 }

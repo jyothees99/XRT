@@ -298,6 +298,7 @@ namespace xdp {
     // Get the column shift for partition
     // NOTE: If partition is not used, this value is zero.
     uint8_t startColShift = metadata->getPartitionOverlayStartCols().front();
+    uint8_t numCols = 38;
     aie::displayColShiftInfo(startColShift);
 
     // Zero trace event tile counts
@@ -322,20 +323,20 @@ namespace xdp {
     auto compilerOptions = metadataReader->getAIECompilerOptions();
     std::shared_ptr<xaiefal::XAieBroadcast> traceStartBroadcastCh1 = nullptr, traceStartBroadcastCh2 = nullptr;
     if(compilerOptions.enable_multi_layer) {
-      std::vector<XAie_LocType> vL;
-      traceStartBroadcastCh1 = aieDevice->broadcast(vL, XAIE_PL_MOD, XAIE_CORE_MOD);
-      traceStartBroadcastCh1->reserve();
-      traceStartBroadcastCh2 = aieDevice->broadcast(vL, XAIE_PL_MOD, XAIE_CORE_MOD);
-      traceStartBroadcastCh2->reserve();
-      XAie_SyncTimerWithTwoBcstChannel(aieDevInst, traceStartBroadcastCh1->getBc(), traceStartBroadcastCh2->getBc());
-      
+
+      aie::trace::timerSyncronization(aieDevInst,aieDevice, metadata, startColShift, numCols);
       if(xrt_core::config::get_aie_trace_settings_trace_start_broadcast()) 
       {
+        std::vector<XAie_LocType> vL;
+        traceStartBroadcastCh1 = aieDevice->broadcast(vL, XAIE_PL_MOD, XAIE_CORE_MOD);
+        traceStartBroadcastCh1->reserve();
+        traceStartBroadcastCh2 = aieDevice->broadcast(vL, XAIE_PL_MOD, XAIE_CORE_MOD);
+        traceStartBroadcastCh2->reserve();
+        aie::trace::build2ChannelBroadcastNetwork(aieDevInst, metadata, traceStartBroadcastCh1->getBc(), traceStartBroadcastCh2->getBc(), XAIE_EVENT_USER_EVENT_0_PL, startColShift, numCols);
+        
         coreTraceStartEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_0_CORE + traceStartBroadcastCh1->getBc());
         memoryTileTraceStartEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_0_MEM_TILE + traceStartBroadcastCh1->getBc());
         interfaceTileTraceStartEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_A_0_PL + traceStartBroadcastCh2->getBc());
-
-        aie::trace::build2ChannelBroadcastNetwork(aieDevInst, metadata, traceStartBroadcastCh1->getBc(), traceStartBroadcastCh2->getBc(), XAIE_EVENT_USER_EVENT_0_PL);
       }
     }
 
@@ -689,7 +690,7 @@ namespace xdp {
           traceStartEvent = comboEvents.at(0);
           traceEndEvent = comboEvents.at(1);
         }
-        if(compilerOptions.enable_multi_layer && type == module_type::core && xrt_core::config::get_aie_trace_settings_trace_start_broadcast())
+        if(type == module_type::core && xrt_core::config::get_aie_trace_settings_trace_start_broadcast())
         {
           traceStartEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_0_MEM + traceStartBroadcastCh1->getBc());
         }
@@ -964,6 +965,9 @@ namespace xdp {
       for (int n = 0; n <= NUM_TRACE_EVENTS; ++n)
         (db->getStaticInfo()).addAIECoreEventResources(deviceId, n, mNumTileTraceEvents[m][n]);
     }
+
+    XAie_EventGenerate(aieDevInst, XAie_TileLoc(startColShift, 0), XAIE_PL_MOD, XAIE_EVENT_USER_EVENT_0_PL);
+
     return true;
   }  // end setMetricsSettings
 
