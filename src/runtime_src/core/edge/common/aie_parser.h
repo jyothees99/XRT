@@ -203,6 +203,7 @@ struct gmio_type
   uint16_t        channelNum;
   uint16_t        streamId;
   uint16_t        burstLength;
+  uint16_t        bufferDescriptorId;
 };
 
 /**

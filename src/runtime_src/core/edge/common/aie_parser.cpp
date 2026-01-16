@@ -578,23 +578,60 @@ get_profile_counter(const pt::ptree& aie_meta, const zynqaie::hwctx_object* hwct
 std::vector<gmio_type>
 get_trace_gmio(const pt::ptree& aie_meta, const zynqaie::hwctx_object* hwctx)
 {
+  auto start_col = get_start_col(aie_meta, hwctx);
+  std::vector<gmio_type> gmios;
+
+  // First try mladf_metadata.TraceShimDMAs
+  auto trace_shim_dmas = aie_meta.get_child_optional("mladf_metadata.TraceShimDMAs");
+  if (trace_shim_dmas) {
+    uint32_t idx = 0;
+    for (auto& dma_node : trace_shim_dmas.get()) {
+      gmio_type gmio;
+
+      auto channelNumber = dma_node.second.get<uint16_t>("channel_number");
+
+      gmio.id = idx++;
+      gmio.name = dma_node.first;
+      gmio.type = dma_node.second.get<uint16_t>("type");
+      gmio.shimColumn = dma_node.second.get<uint16_t>("shim_column") + start_col;
+      gmio.channelNum = channelNumber;
+      gmio.streamId = 0;
+      gmio.burstLength = 8;
+
+      // Get buffer_descriptor_ids and use the first one
+      auto bdIds = dma_node.second.get_child_optional("buffer_descriptor_ids");
+      if (bdIds && !bdIds->empty()) {
+        gmio.bufferDescriptorId = bdIds->front().second.get_value<uint16_t>();
+      } else {
+        gmio.bufferDescriptorId = 14 + channelNumber;
+      }
+
+      gmios.emplace_back(std::move(gmio));
+    }
+
+    if (!gmios.empty())
+      return gmios;
+  }
+
+  // Fall back to aie_metadata.TraceGMIOs
   auto trace_gmios = aie_meta.get_child_optional("aie_metadata.TraceGMIOs");
   if (!trace_gmios)
     return {};
 
-  auto start_col = get_start_col(aie_meta, hwctx);
-  std::vector<gmio_type> gmios;
-
   for (auto& gmio_node : trace_gmios.get()) {
     gmio_type gmio;
+
+    auto channelNumber = gmio_node.second.get<uint16_t>("channel_number");
 
     gmio.id = gmio_node.second.get<uint32_t>("id");
     //gmio.name = gmio_node.second.get<std::string>("name");
     //gmio.type = gmio_node.second.get<uint16_t>("type");
     gmio.shimColumn = gmio_node.second.get<uint16_t>("shim_column") + start_col;
-    gmio.channelNum = gmio_node.second.get<uint16_t>("channel_number");
+    gmio.channelNum = channelNumber;
     gmio.streamId = gmio_node.second.get<uint16_t>("stream_id");
     gmio.burstLength = gmio_node.second.get<uint16_t>("burst_length_in_16byte");
+    // Default bufferDescriptorId for legacy path (channel 0 -> BD 14, channel 1 -> BD 15)
+    gmio.bufferDescriptorId = 14 + channelNumber;
 
     gmios.emplace_back(std::move(gmio));
   }
